@@ -5,6 +5,8 @@ https://github.com/fmassa/vision/blob/voc_dataset/torchvision/datasets/voc.py
 
 Updated by: Ellis Brown, Max deGroot
 """
+import random
+
 from .config import HOME
 import os.path as osp
 import sys
@@ -12,22 +14,19 @@ import torch
 import torch.utils.data as data
 import cv2
 import numpy as np
+from pathlib import Path
+from typing import Union
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
 else:
     import xml.etree.ElementTree as ET
 
-VOC_CLASSES = (  # always index 0
-    'speedboat', 'bicycle', 'bird', 'boat',
-    'bottle', 'bus', 'car', 'cat', 'chair',
-    'cow', 'diningtable', 'dog', 'horse',
-    'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
-
+CUSTOM_CLASSES = (
+    'speedboat', 'motorboat', 'surfing', 'airplane', 'seabird', 'missile')
 
 # note: if you used our download scripts, this should be right
-VOC_ROOT = osp.join(HOME, "data/VOCdevkit/")
-x
+CUSTOM_ROOT = osp.join(HOME, "YOU/pro/")
+
 
 class VOCAnnotationTransform(object):
     """Transforms a VOC annotation into a Tensor of bbox coords and label index
@@ -45,7 +44,7 @@ class VOCAnnotationTransform(object):
     def __init__(self, class_to_ind=None, keep_difficult=False):
         # use zip achive dict
         self.class_to_ind = class_to_ind or dict(
-            zip(VOC_CLASSES, range(len(VOC_CLASSES))))
+            zip(CUSTOM_CLASSES, range(len(CUSTOM_CLASSES))))
         self.keep_difficult = keep_difficult
 
     def __call__(self, target, width, height):
@@ -97,23 +96,21 @@ class VOCDetection(data.Dataset):
     """
 
     def __init__(self, root,
-                 image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
+                 image_sets='MHSO6',
                  transform=None, target_transform=VOCAnnotationTransform(),
-                 dataset_name='VOC0712'):
+                 dataset_name='MHSO6'):
         self.root = root
         self.image_set = image_sets
         self.transform = transform
         self.target_transform = target_transform
         self.name = dataset_name
-        # 准备所有xml文件的存放路径
-        self._annopath = osp.join('%s', 'Annotations', '%s.xml')
-        # 准备所有jpg文件的存放路径
-        self._imgpath = osp.join('%s', 'JPEGImages', '%s.jpg')
+        self._annopath = osp.join('%s', 'annotations', "val",'%s.xml')
+        self._imgpath = osp.join('%s', 'images', "val", '%s.jpg')
         self.ids = list()
-        for (year, name) in image_sets:
-            rootpath = osp.join(self.root, 'VOC' + year)
-            for line in open(osp.join(rootpath, 'ImageSets', 'Main', name + '.txt')):
-                self.ids.append((rootpath, line.strip()))
+        rootpath = osp.join(self.root, "MHSO6")
+        for line in open(osp.join(rootpath, 'val.txt')):
+            # (you/pro/MHSO6, 16189)
+            self.ids.append((rootpath, str(Path(line.strip()).stem)))
 
     def __getitem__(self, index):
         im, gt, h, w = self.pull_item(index)
@@ -125,24 +122,24 @@ class VOCDetection(data.Dataset):
 
     def pull_item(self, index):
         img_id = self.ids[index]
-        # 获得xml的根位置以便遍历
+
         target = ET.parse(self._annopath % img_id).getroot()
-        # 使用img_id的元组填充路径
         img = cv2.imread(self._imgpath % img_id)
         height, width, channels = img.shape
 
         if self.target_transform is not None:
-            # 对tree进行解析，返回一个[[xmin, ymin, xmax, ymax, label_ind], ... ]
             target = self.target_transform(target, width, height)
 
         if self.transform is not None:
-            # 对目标进行yu处理
             target = np.array(target)
-            img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
-            # to rgb
-            img = img[:, :, (2, 1, 0)]
-            # img = img.transpose(2, 0, 1)
-            target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
+            if target.shape[0] > 0:
+                img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
+                # to rgb
+                img = img[:, :, (2, 1, 0)]
+                # img = img.transpose(2, 0, 1)
+                target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
+            else:
+                return self.pull_item(random.randint(0, len(self.ids)))
         return torch.from_numpy(img).permute(2, 0, 1), target, height, width
         # return torch.from_numpy(img), target, height, width
 

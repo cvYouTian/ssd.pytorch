@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco
+from data import voc, coco, custom
 import os
 
 
@@ -28,10 +28,11 @@ class SSD(nn.Module):
     def __init__(self, phase, size, base, extras, head, num_classes):
         super(SSD, self).__init__()
         self.phase = phase
-        self.num_classes = num_classes
-        self.cfg = (coco, voc)[num_classes == 21]
+        self.num_classes = 7
+        self.cfg = (coco, voc, custom)[num_classes == 21]
         self.priorbox = PriorBox(self.cfg)
-        self.priors = Variable(self.priorbox.forward(), volatile=True)
+        with torch.no_grad():
+            self.priors = Variable(self.priorbox.forward())
         self.size = size
 
         # SSD network
